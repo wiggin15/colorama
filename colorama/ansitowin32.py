@@ -42,8 +42,6 @@ class AnsiToWin32(object):
     sequences from the text, and if outputting to a tty, will convert them into
     win32 function calls.
     '''
-    ANSI_CSI_RE = re.compile('\033\[((?:\d|;)*)([a-zA-Z])')     # Control Sequence Introducer
-    ANSI_OSC_RE = re.compile('\033\]((?:.|;)*?)(\x07)')         # Operating System Command
 
     def __init__(self, wrapped, convert=None, strip=None, autoreset=False):
         # The wrapped stream (normally sys.stdout or sys.stderr)
@@ -73,6 +71,14 @@ class AnsiToWin32(object):
 
         # are we wrapping stderr?
         self.on_stderr = self.wrapped is sys.stderr
+
+        self.ANSI_CSI_RE = re.compile(self.text('\033\[((?:\d|;)*)([a-zA-Z])'))     # Control Sequence Introducer
+        self.ANSI_OSC_RE = re.compile(self.text('\033\]((?:.|;)*?)(\x07)'))         # Operating System Command
+
+    def text(self, text):
+        if 'b' in self.wrapped.mode:
+            return text.encode("ascii")
+        return text
 
     def should_wrap(self):
         '''
@@ -142,7 +148,7 @@ class AnsiToWin32(object):
         if self.convert:
             self.call_win32('m', (0,))
         elif not self.wrapped.closed and is_a_tty(self.wrapped):
-            self.wrapped.write(Style.RESET_ALL)
+            self.wrapped.write(self.text(Style.RESET_ALL))
 
 
     def write_and_convert(self, text):
@@ -174,25 +180,25 @@ class AnsiToWin32(object):
 
 
     def extract_params(self, command, paramstring):
-        if command in 'Hf':
-            params = tuple(int(p) if len(p) != 0 else 1 for p in paramstring.split(';'))
+        if command in self.text('Hf'):
+            params = tuple(int(p) if len(p) != 0 else 1 for p in paramstring.split(self.text(';')))
             while len(params) < 2:
                 # defaults:
                 params = params + (1,)
         else:
-            params = tuple(int(p) for p in paramstring.split(';') if len(p) != 0)
+            params = tuple(int(p) for p in paramstring.split(self.text(';')) if len(p) != 0)
             if len(params) == 0:
                 # defaults:
-                if command in 'JKm':
+                if command in self.text('JKm'):
                     params = (0,)
-                elif command in 'ABCD':
+                elif command in self.text('ABCD'):
                     params = (1,)
 
         return params
 
 
     def call_win32(self, command, params):
-        if command == 'm':
+        if command == self.text('m'):
             for param in params:
                 if param in self.win32_calls:
                     func_args = self.win32_calls[param]
@@ -200,16 +206,19 @@ class AnsiToWin32(object):
                     args = func_args[1:]
                     kwargs = dict(on_stderr=self.on_stderr)
                     func(*args, **kwargs)
-        elif command in 'J':
+        elif command in self.text('J'):
             winterm.erase_screen(params[0], on_stderr=self.on_stderr)
-        elif command in 'K':
+        elif command in self.text('K'):
             winterm.erase_line(params[0], on_stderr=self.on_stderr)
-        elif command in 'Hf':     # cursor position - absolute
+        elif command in self.text('Hf'):     # cursor position - absolute
             winterm.set_cursor_position(params, on_stderr=self.on_stderr)
-        elif command in 'ABCD':   # cursor position - relative
+        elif command in self.text('ABCD'):   # cursor position - relative
             n = params[0]
             # A - up, B - down, C - forward, D - back
-            x, y = {'A': (0, -n), 'B': (0, n), 'C': (n, 0), 'D': (-n, 0)}[command]
+            x, y = {self.text('A'): (0, -n),
+                    self.text('B'): (0, n),
+                    self.text('C'): (n, 0),
+                    self.text('D'): (-n, 0)}[command]
             winterm.cursor_adjust(x, y, on_stderr=self.on_stderr)
 
 
@@ -218,11 +227,11 @@ class AnsiToWin32(object):
             start, end = match.span()
             text = text[:start] + text[end:]
             paramstring, command = match.groups()
-            if command in '\x07':       # \x07 = BEL
+            if command in self.text('\x07'):       # \x07 = BEL
                 params = paramstring.split(";")
                 # 0 - change title and icon (we will only change title)
                 # 1 - change icon (we don't support this)
                 # 2 - change title
-                if params[0] in '02':
+                if params[0] in self.text('02'):
                     winterm.set_title(params[1])
         return text
