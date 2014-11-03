@@ -88,6 +88,25 @@ else:
     ]
     _SetConsoleTitleW.restype = wintypes.BOOL
 
+    _SetConsoleIcon = windll.kernel32.SetConsoleIcon
+    _SetConsoleIcon.argtypes = [
+        wintypes.HANDLE
+    ]
+    _SetConsoleIcon.restype = wintypes.BOOL
+
+    _LoadImage = windll.user32.LoadImageA
+    _LoadImage.argtypes = [
+        wintypes.HANDLE,
+        wintypes.c_char_p,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.DWORD
+    ]
+    _LoadImage.restype = wintypes.BOOL
+
+    original_hicon = None
+
     handles = {
         STDOUT: _GetStdHandle(STDOUT),
         STDERR: _GetStdHandle(STDERR),
@@ -144,3 +163,19 @@ else:
 
     def SetConsoleTitle(title):
         return _SetConsoleTitleW(title)
+
+    def SetConsoleIcon(icon_path):
+        global original_hicon
+        if original_hicon is None:
+            h = windll.user32.GetForegroundWindow()
+            original_hicon = windll.user32.SendMessageA(h, 0x7F, 2, 0)
+        LR_LOADFROMFILE = 16
+        IMAGE_ICON = 1
+        ICO_X = ICO_Y = 16      # TODO get; TODO reset icon?
+        hicon = _LoadImage(None, icon_path, IMAGE_ICON, ICO_X, ICO_Y, LR_LOADFROMFILE)
+        if hicon:
+            return _SetConsoleIcon(hicon)
+
+    def ResetConsoleIcon():
+        if original_hicon:
+            return _SetConsoleIcon(original_hicon)

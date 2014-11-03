@@ -149,3 +149,9 @@ class WinTerm(object):
 
     def set_title(self, title):
         win32.SetConsoleTitle(title)
+
+    def set_icon(self, icon):
+        win32.SetConsoleIcon(icon)
+
+    def reset_icon(self):
+        win32.ResetConsoleIcon()

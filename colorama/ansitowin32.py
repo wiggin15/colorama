@@ -139,6 +139,7 @@ class AnsiToWin32(object):
 
 
     def reset_all(self):
+        winterm.reset_icon()
         if self.convert:
             self.call_win32('m', (0,))
         elif not self.wrapped.closed and is_a_tty(self.wrapped):
@@ -220,9 +221,11 @@ class AnsiToWin32(object):
             paramstring, command = match.groups()
             if command in '\x07':       # \x07 = BEL
                 params = paramstring.split(";")
-                # 0 - change title and icon (we will only change title)
-                # 1 - change icon (we don't support this)
+                # 0 - change title and icon
+                # 1 - change icon
                 # 2 - change title
+                if params[0] in '01':
+                    winterm.set_icon(params[1])
                 if params[0] in '02':
                     winterm.set_title(params[1])
         return text
