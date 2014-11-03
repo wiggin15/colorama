@@ -42,8 +42,8 @@ class AnsiToWin32(object):
     sequences from the text, and if outputting to a tty, will convert them into
     win32 function calls.
     '''
-    ANSI_CSI_RE = re.compile('\033\[((?:\d|;)*)([a-zA-Z])')     # Control Sequence Introducer
-    ANSI_OSC_RE = re.compile('\033\]((?:.|;)*?)(\x07)')         # Operating System Command
+    ANSI_CSI_RE = re.compile('\033\[(?:\?(?=25[lh]))?((?:|\d|;)*)([a-zA-Z])')     # Control Sequence Introducer
+    ANSI_OSC_RE = re.compile('\033\]((?:.|;)*?)(\x07)')                           # Operating System Command
 
     def __init__(self, wrapped, convert=None, strip=None, autoreset=False):
         # The wrapped stream (normally sys.stdout or sys.stderr)
@@ -211,6 +211,8 @@ class AnsiToWin32(object):
             # A - up, B - down, C - forward, D - back
             x, y = {'A': (0, -n), 'B': (0, n), 'C': (n, 0), 'D': (-n, 0)}[command]
             winterm.cursor_adjust(x, y, on_stderr=self.on_stderr)
+        elif command in 'lh' and params[0] == 25:
+            winterm.set_cursor_visibility(command == "h", on_stderr=self.on_stderr)
 
 
     def convert_osc(self, text):

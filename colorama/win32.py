@@ -35,6 +35,15 @@ else:
                 , self.dwMaximumWindowSize.Y, self.dwMaximumWindowSize.X
             )
 
+    class CONSOLE_CURSOR_INFO(Structure):
+        """struct in wincon.h."""
+        _fields_ = [
+            ("dwSize", wintypes.DWORD),
+            ("bVisible", wintypes.BOOL),
+        ]
+        def __str__(self):
+            return '(%d,%d)' % (self.dwSize, self.bVisible)
+
     _GetStdHandle = windll.kernel32.GetStdHandle
     _GetStdHandle.argtypes = [
         wintypes.DWORD,
@@ -87,6 +96,20 @@ else:
         wintypes.LPCSTR
     ]
     _SetConsoleTitleW.restype = wintypes.BOOL
+
+    _SetConsoleCursorInfo = windll.kernel32.SetConsoleCursorInfo
+    _SetConsoleCursorInfo.argtypes = [
+        wintypes.HANDLE,
+        POINTER(CONSOLE_CURSOR_INFO)
+    ]
+    _SetConsoleCursorInfo.restype = wintypes.BOOL
+
+    _GetConsoleCursorInfo = windll.kernel32.GetConsoleCursorInfo
+    _GetConsoleCursorInfo.argtypes = [
+        wintypes.HANDLE,
+        POINTER(CONSOLE_CURSOR_INFO)
+    ]
+    _GetConsoleCursorInfo.restype = wintypes.BOOL
 
     handles = {
         STDOUT: _GetStdHandle(STDOUT),
@@ -144,3 +167,13 @@ else:
 
     def SetConsoleTitle(title):
         return _SetConsoleTitleW(title)
+
+    def SetConsoleCursorInfo(stream_id, size, visibility):
+        handle = handles[stream_id]
+        info = CONSOLE_CURSOR_INFO()
+        success = _GetConsoleCursorInfo(handle, byref(info))
+        if size is not None:
+            info.dwSize = size
+        if visibility is not None:
+            info.bVisible = visibility
+        return success and _SetConsoleCursorInfo(handle, info)
