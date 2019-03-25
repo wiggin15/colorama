@@ -21,8 +21,9 @@ class WinStyle(object):
 
 class WinTerm(object):
 
-    def __init__(self):
-        self._default = win32.GetConsoleScreenBufferInfo(win32.STDOUT).wAttributes
+    def __init__(self, on_stderr=False):
+        self._handle = win32.STDERR if on_stderr else win32.STDOUT
+        self._default = win32.GetConsoleScreenBufferInfo(self._handle).wAttributes
         self.set_attrs(self._default)
         self._default_fore = self._fore
         self._default_back = self._back
@@ -41,12 +42,12 @@ class WinTerm(object):
         self._back = (value >> 4) & 7
         self._style = value & (WinStyle.BRIGHT | WinStyle.BRIGHT_BACKGROUND)
 
-    def reset_all(self, on_stderr=None):
+    def reset_all(self):
         self.set_attrs(self._default)
         self.set_console(attrs=self._default)
         self._light = 0
 
-    def fore(self, fore=None, light=False, on_stderr=False):
+    def fore(self, fore=None, light=False):
         if fore is None:
             fore = self._default_fore
         self._fore = fore
@@ -55,9 +56,9 @@ class WinTerm(object):
             self._light |= WinStyle.BRIGHT
         else:
             self._light &= ~WinStyle.BRIGHT
-        self.set_console(on_stderr=on_stderr)
+        self.set_console()
 
-    def back(self, back=None, light=False, on_stderr=False):
+    def back(self, back=None, light=False):
         if back is None:
             back = self._default_back
         self._back = back
@@ -66,56 +67,44 @@ class WinTerm(object):
             self._light |= WinStyle.BRIGHT_BACKGROUND
         else:
             self._light &= ~WinStyle.BRIGHT_BACKGROUND
-        self.set_console(on_stderr=on_stderr)
+        self.set_console()
 
-    def style(self, style=None, on_stderr=False):
+    def style(self, style=None):
         if style is None:
             style = self._default_style
         self._style = style
-        self.set_console(on_stderr=on_stderr)
+        self.set_console()
 
-    def set_console(self, attrs=None, on_stderr=False):
+    def set_console(self, attrs=None):
         if attrs is None:
             attrs = self.get_attrs()
-        handle = win32.STDOUT
-        if on_stderr:
-            handle = win32.STDERR
-        win32.SetConsoleTextAttribute(handle, attrs)
+        win32.SetConsoleTextAttribute(self._handle, attrs)
 
-    def get_position(self, handle):
-        position = win32.GetConsoleScreenBufferInfo(handle).dwCursorPosition
+    def get_position(self):
+        position = win32.GetConsoleScreenBufferInfo(self._handle).dwCursorPosition
         # Because Windows coordinates are 0-based,
         # and win32.SetConsoleCursorPosition expects 1-based.
         position.X += 1
         position.Y += 1
         return position
 
-    def set_cursor_position(self, position=None, on_stderr=False):
+    def set_cursor_position(self, position=None):
         if position is None:
             # I'm not currently tracking the position, so there is no default.
             # position = self.get_position()
             return
-        handle = win32.STDOUT
-        if on_stderr:
-            handle = win32.STDERR
-        win32.SetConsoleCursorPosition(handle, position)
+        win32.SetConsoleCursorPosition(self._handle, position)
 
-    def cursor_adjust(self, x, y, on_stderr=False):
-        handle = win32.STDOUT
-        if on_stderr:
-            handle = win32.STDERR
-        position = self.get_position(handle)
+    def cursor_adjust(self, x, y):
+        position = self.get_position()
         adjusted_position = (position.Y + y, position.X + x)
-        win32.SetConsoleCursorPosition(handle, adjusted_position, adjust=False)
+        win32.SetConsoleCursorPosition(self._handle, adjusted_position, adjust=False)
 
-    def erase_screen(self, mode=0, on_stderr=False):
+    def erase_screen(self, mode=0,):
         # 0 should clear from the cursor to the end of the screen.
         # 1 should clear from the cursor to the beginning of the screen.
         # 2 should clear the entire screen, and move cursor to (1,1)
-        handle = win32.STDOUT
-        if on_stderr:
-            handle = win32.STDERR
-        csbi = win32.GetConsoleScreenBufferInfo(handle)
+        csbi = win32.GetConsoleScreenBufferInfo(self._handle)
         # get the number of character cells in the current buffer
         cells_in_screen = csbi.dwSize.X * csbi.dwSize.Y
         # get number of character cells before current cursor position
@@ -133,21 +122,18 @@ class WinTerm(object):
             # invalid mode
             return
         # fill the entire screen with blanks
-        win32.FillConsoleOutputCharacter(handle, ' ', cells_to_erase, from_coord)
+        win32.FillConsoleOutputCharacter(self._handle, ' ', cells_to_erase, from_coord)
         # now set the buffer's attributes accordingly
-        win32.FillConsoleOutputAttribute(handle, self.get_attrs(), cells_to_erase, from_coord)
+        win32.FillConsoleOutputAttribute(self._handle, self.get_attrs(), cells_to_erase, from_coord)
         if mode == 2:
             # put the cursor where needed
-            win32.SetConsoleCursorPosition(handle, (1, 1))
+            win32.SetConsoleCursorPosition(self._handle, (1, 1))
 
-    def erase_line(self, mode=0, on_stderr=False):
+    def erase_line(self, mode=0):
         # 0 should clear from the cursor to the end of the line.
         # 1 should clear from the cursor to the beginning of the line.
         # 2 should clear the entire line.
-        handle = win32.STDOUT
-        if on_stderr:
-            handle = win32.STDERR
-        csbi = win32.GetConsoleScreenBufferInfo(handle)
+        csbi = win32.GetConsoleScreenBufferInfo(self._handle)
         if mode == 0:
             from_coord = csbi.dwCursorPosition
             cells_to_erase = csbi.dwSize.X - csbi.dwCursorPosition.X
@@ -161,9 +147,9 @@ class WinTerm(object):
             # invalid mode
             return
         # fill the entire screen with blanks
-        win32.FillConsoleOutputCharacter(handle, ' ', cells_to_erase, from_coord)
+        win32.FillConsoleOutputCharacter(self._handle, ' ', cells_to_erase, from_coord)
         # now set the buffer's attributes accordingly
-        win32.FillConsoleOutputAttribute(handle, self.get_attrs(), cells_to_erase, from_coord)
+        win32.FillConsoleOutputAttribute(self._handle, self.get_attrs(), cells_to_erase, from_coord)
 
     def set_title(self, title):
         win32.SetConsoleTitle(title)

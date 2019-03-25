@@ -8,9 +8,11 @@ from .winterm import WinTerm, WinColor, WinStyle
 from .win32 import windll, winapi_test
 
 
-winterm = None
+winterm_stdout = None
+winterm_stderr = None
 if windll is not None:
-    winterm = WinTerm()
+    winterm_stdout = WinTerm(on_stderr=False)
+    winterm_stderr = WinTerm(on_stderr=True)
 
 
 class StreamWrapper(object):
@@ -97,11 +99,10 @@ class AnsiToWin32(object):
             convert = conversion_supported and not self.stream.closed and self.stream.isatty()
         self.convert = convert
 
+        self.on_stderr = self.wrapped is sys.stderr
+
         # dict of ansi codes to win32 functions and parameters
         self.win32_calls = self.get_win32_calls()
-
-        # are we wrapping stderr?
-        self.on_stderr = self.wrapped is sys.stderr
 
     def should_wrap(self):
         '''
@@ -113,7 +114,11 @@ class AnsiToWin32(object):
         '''
         return self.convert or self.strip or self.autoreset
 
+    def get_winterm(self):
+        return winterm_stderr if self.on_stderr else winterm_stdout
+
     def get_win32_calls(self):
+        winterm = self.get_winterm()
         if self.convert and winterm:
             return {
                 AnsiStyle.RESET_ALL: (winterm.reset_all, ),
@@ -227,19 +232,18 @@ class AnsiToWin32(object):
                     func_args = self.win32_calls[param]
                     func = func_args[0]
                     args = func_args[1:]
-                    kwargs = dict(on_stderr=self.on_stderr)
-                    func(*args, **kwargs)
+                    func(*args)
         elif command in 'J':
-            winterm.erase_screen(params[0], on_stderr=self.on_stderr)
+            self.get_winterm().erase_screen(params[0])
         elif command in 'K':
-            winterm.erase_line(params[0], on_stderr=self.on_stderr)
+            self.get_winterm().erase_line(params[0])
         elif command in 'Hf':     # cursor position - absolute
-            winterm.set_cursor_position(params, on_stderr=self.on_stderr)
+            self.get_winterm().set_cursor_position(params)
         elif command in 'ABCD':   # cursor position - relative
             n = params[0]
             # A - up, B - down, C - forward, D - back
             x, y = {'A': (0, -n), 'B': (0, n), 'C': (n, 0), 'D': (-n, 0)}[command]
-            winterm.cursor_adjust(x, y, on_stderr=self.on_stderr)
+            self.get_winterm().cursor_adjust(x, y)
 
 
     def convert_osc(self, text):
@@ -254,5 +258,5 @@ class AnsiToWin32(object):
                     # 1 - change icon (we don't support this)
                     # 2 - change title
                     if params[0] in '02':
-                        winterm.set_title(params[1])
+                        self.get_winterm().set_title(params[1])
         return text
