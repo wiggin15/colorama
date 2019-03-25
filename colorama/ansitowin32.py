@@ -243,15 +243,16 @@ class AnsiToWin32(object):
 
 
     def convert_osc(self, text):
-        for match in self.ANSI_OSC_RE.finditer(text):
-            start, end = match.span()
-            text = text[:start] + text[end:]
-            paramstring, command = match.groups()
-            if command in '\x07':       # \x07 = BEL
-                params = paramstring.split(";")
-                # 0 - change title and icon (we will only change title)
-                # 1 - change icon (we don't support this)
-                # 2 - change title
-                if params[0] in '02':
-                    winterm.set_title(params[1])
+        if self.convert:
+            for match in self.ANSI_OSC_RE.finditer(text):
+                start, end = match.span()
+                text = text[:start] + text[end:]
+                paramstring, command = match.groups()
+                if command in '\x07':       # \x07 = BEL
+                    params = paramstring.split(";")
+                    # 0 - change title and icon (we will only change title)
+                    # 1 - change icon (we don't support this)
+                    # 2 - change title
+                    if params[0] in '02':
+                        winterm.set_title(params[1])
         return text
